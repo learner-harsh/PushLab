@@ -2,6 +2,39 @@ import Foundation
 
 enum CurlExporter {
     static func command(for input: PushInput) -> String {
+        switch input.platform {
+        case .apns: return apnsCommand(for: input)
+        case .fcm: return fcmCommand(for: input)
+        }
+    }
+
+    static func fcmCommand(for input: PushInput) -> String {
+        let fcm = input.fcm
+        let projectId = fcm.serviceAccount?.projectId ?? "<project id>"
+        let target = fcm.targets.first ?? "<\(fcm.targetKind.rawValue)>"
+        let bodyText: String
+        if let data = try? FCMClient.requestBody(for: fcm, target: target), let text = String(data: data, encoding: .utf8) {
+            bodyText = text
+        } else {
+            bodyText = "{ \"message\": { \"\(fcm.targetKind.rawValue)\": \"\(target)\" } }"
+        }
+        let body = bodyText.replacingOccurrences(of: "'", with: "'\\''")
+        let accountPath = fcm.serviceAccountFile?.url?.path ?? "<service-account.json>"
+        let curl = [
+            "curl -v -X POST",
+            "--header \"authorization: Bearer $(gcloud auth print-access-token)\"",
+            "--header \"content-type: application/json; charset=UTF-8\"",
+            "--data '\(body)'",
+            "\"https://fcm.googleapis.com/v1/projects/\(projectId)/messages:send\""
+        ].joined(separator: " \\\n  ")
+        return """
+        # Mint an access token with the same service account first:
+        # gcloud auth activate-service-account --key-file="\(accountPath)"
+        \(curl)
+        """
+    }
+
+    static func apnsCommand(for input: PushInput) -> String {
         let token = input.deviceTokens.first ?? "<device token>"
         let url = input.environment.baseURL.appendingPathComponent(token).absoluteString
         var parts: [String] = ["curl -v --http2"]

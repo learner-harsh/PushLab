@@ -72,7 +72,9 @@ struct HistoryRow: View {
                 Text("#\(item.number) · \(item.statusTitle)")
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text("\(item.shortToken) · \(item.environment.title) · \(item.pushType.rawValue) · \(item.createdAt.formatted(date: .omitted, time: .standard))")
+                Text(item.platform == .fcm
+                     ? "\(item.shortToken) · \(item.destinationTitle) · \(item.createdAt.formatted(date: .omitted, time: .standard))"
+                     : "\(item.shortToken) · \(item.environment.title) · \(item.pushType.rawValue) · \(item.createdAt.formatted(date: .omitted, time: .standard))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -132,8 +134,8 @@ struct SendHistoryItemView: View {
                 LabeledContent("Reason") {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(reasonCode).font(.body.weight(.semibold))
-                        if let reason = item.reason {
-                            Text(reason.explanation)
+                        if let explanation = item.reasonExplanation {
+                            Text(explanation)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
@@ -141,15 +143,26 @@ struct SendHistoryItemView: View {
                     }
                 }
             }
-            if let apnsId = item.apnsId {
-                LabeledContent("apns-id") { Text(apnsId).textSelection(.enabled).monospaced() }
+            LabeledContent("Platform") { Text(item.platform.title) }
+            switch item.platform {
+            case .apns:
+                if let apnsId = item.apnsId {
+                    LabeledContent("apns-id") { Text(apnsId).textSelection(.enabled).monospaced() }
+                }
+                if let uniqueId = item.apnsUniqueId {
+                    LabeledContent("apns-unique-id") { Text(uniqueId).textSelection(.enabled).monospaced() }
+                }
+                LabeledContent("Environment") { Text("\(item.environment.title) · \(item.environment.host)") }
+                LabeledContent("Push type") { Text(item.pushType.rawValue) }
+            case .fcm:
+                if let name = item.fcmMessageName {
+                    LabeledContent("Message name") { Text(name).textSelection(.enabled).monospaced().lineLimit(2).truncationMode(.middle) }
+                }
+                if let projectId = item.projectId {
+                    LabeledContent("Project") { Text(projectId).textSelection(.enabled) }
+                }
             }
-            if let uniqueId = item.apnsUniqueId {
-                LabeledContent("apns-unique-id") { Text(uniqueId).textSelection(.enabled).monospaced() }
-            }
-            LabeledContent("Environment") { Text("\(item.environment.title) · \(item.environment.host)") }
-            LabeledContent("Push type") { Text(item.pushType.rawValue) }
-            LabeledContent("Device token") {
+            LabeledContent(item.platform == .fcm ? "Target" : "Device token") {
                 Text(item.deviceToken)
                     .monospaced()
                     .textSelection(.enabled)

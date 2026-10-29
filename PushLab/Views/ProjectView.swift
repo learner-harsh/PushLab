@@ -10,13 +10,26 @@ struct ProjectView: View {
         Form {
             Section {
                 TextField("Name", text: $template.name, prompt: Text("My app · staging"))
+                Picker("Platform", selection: $template.input.platform) {
+                    ForEach(PushPlatform.allCases) { platform in
+                        Label(platform.title, systemImage: platform.symbol).tag(platform)
+                    }
+                }
+                .pickerStyle(.segmented)
             } header: {
                 SectionHeader(title: "Template", symbol: "doc.text")
             }
 
-            AuthSection(input: $template.input)
-            HeaderSection(input: $template.input)
-            BodySection(input: $template.input)
+            switch template.input.platform {
+            case .apns:
+                AuthSection(input: $template.input)
+                HeaderSection(input: $template.input)
+                BodySection(input: $template.input)
+            case .fcm:
+                FCMCredentialsSection(fcm: $template.input.fcm)
+                FCMTargetSection(fcm: $template.input.fcm)
+                FCMMessageSection(fcm: $template.input.fcm)
+            }
 
             Section {
                 if errors.isEmpty {

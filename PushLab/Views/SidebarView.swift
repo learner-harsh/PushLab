@@ -38,12 +38,16 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Button {
-                    store.addTemplate()
+                Menu {
+                    Button { store.addTemplate(platform: .apns) } label: { Label("Apple · APNs", systemImage: "apple.logo") }
+                    Button { store.addTemplate(platform: .fcm) } label: { Label("Android · FCM", systemImage: "flame.fill") }
                 } label: {
                     Label("New Template", systemImage: "plus")
+                } primaryAction: {
+                    store.addTemplate()
                 }
-                .buttonStyle(.borderless)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
                 Spacer()
                 SettingsLink {
                     Image(systemName: "gearshape")
@@ -78,13 +82,12 @@ struct SidebarView: View {
 
     private func row(_ template: PushTemplate) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: template.input.environment == .sandbox ? "hammer.fill" : "shippingbox.fill")
-                .foregroundStyle(template.input.environment == .sandbox ? .orange : .green)
+            platformIcon(template.input)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 Text(template.name)
                     .lineLimit(1)
-                Text(template.input.bundleId.isEmpty ? "No bundle id" : template.input.bundleId)
+                Text(template.input.subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -100,5 +103,19 @@ struct SidebarView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func platformIcon(_ input: PushInput) -> some View {
+        switch input.platform {
+        case .apns:
+            Image(systemName: "apple.logo")
+                .foregroundStyle(input.environment == .sandbox ? .orange : .green)
+                .help(input.environment.title)
+        case .fcm:
+            Image(systemName: "flame.fill")
+                .foregroundStyle(.yellow)
+                .help("Firebase Cloud Messaging")
+        }
     }
 }

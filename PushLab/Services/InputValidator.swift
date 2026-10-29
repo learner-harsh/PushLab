@@ -15,6 +15,10 @@ enum InputError: LocalizedError, Equatable, Identifiable {
     case invalidDeviceToken(String)
     case invalidExpiration
     case invalidNotificationId
+    case emptyServiceAccount
+    case invalidServiceAccount(String)
+    case emptyFCMTarget(FCMTargetKind)
+    case invalidFCMToken(String)
 
     var id: String { errorDescription ?? "" }
 
@@ -34,6 +38,10 @@ enum InputError: LocalizedError, Equatable, Identifiable {
         case .invalidDeviceToken(let token): return "Check that device tokens are valid hexadecimal strings (\(token))"
         case .invalidExpiration: return "Check that expiration is either 0 or a UNIX epoch expressed in seconds"
         case .invalidNotificationId: return "Check that notification id is a canonical UUID (8-4-4-4-12)"
+        case .emptyServiceAccount: return "Check that a Firebase service account JSON file is selected"
+        case .invalidServiceAccount(let detail): return "Check that the service account file is valid: \(detail)"
+        case .emptyFCMTarget(let kind): return "Check that the \(kind.title.lowercased()) is not empty"
+        case .invalidFCMToken(let token): return "Check that registration tokens contain no spaces or quotes (\(token))"
         }
     }
 }
@@ -52,6 +60,44 @@ enum NetworkError: LocalizedError {
 
 enum InputValidator {
     static func validate(_ input: PushInput) -> [InputError] {
+        switch input.platform {
+        case .apns: return validateAPNs(input)
+        case .fcm: return validateFCM(input.fcm)
+        }
+    }
+
+    static func validateFCM(_ fcm: FCMInput) -> [InputError] {
+        var errors: [InputError] = []
+
+        if fcm.serviceAccountFile?.data == nil {
+            errors.append(.emptyServiceAccount)
+        } else if let account = fcm.serviceAccount {
+            do { _ = try RS256Signer.privateKey(fromPEM: account.privateKey) }
+            catch { errors.append(.invalidServiceAccount("the private_key is not a usable RSA key")) }
+        } else {
+            errors.append(.invalidServiceAccount("project_id, client_email, or private_key is missing"))
+        }
+
+        let targets = fcm.targets
+        if targets.isEmpty {
+            errors.append(.emptyFCMTarget(fcm.targetKind))
+        } else if fcm.targetKind == .token {
+            for token in targets where token.rangeOfCharacter(from: CharacterSet(charactersIn: "\"'<>")) != nil || token.count < 20 {
+                errors.append(.invalidFCMToken(token.count > 24 ? String(token.prefix(24)) + "…" : token))
+                break
+            }
+        }
+
+        let message = fcm.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.isEmpty {
+            errors.append(.emptyMessage)
+        } else if let problem = jsonProblem(in: message) {
+            errors.append(.invalidMessage(problem))
+        }
+        return errors
+    }
+
+    static func validateAPNs(_ input: PushInput) -> [InputError] {
         var errors: [InputError] = []
 
         if input.topic.isEmpty { errors.append(.emptyBundleId) }

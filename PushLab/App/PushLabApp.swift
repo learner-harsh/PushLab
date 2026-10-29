@@ -15,8 +15,10 @@ struct PushLabApp: App {
         .defaultSize(width: 1356, height: 720)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Template") { store.addTemplate() }
+                Button("New Apple Template") { store.addTemplate(platform: .apns) }
                     .keyboardShortcut("n", modifiers: .command)
+                Button("New Android Template") { store.addTemplate(platform: .fcm) }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("Duplicate Template") { store.duplicateSelected() }
                     .keyboardShortcut("d", modifiers: .command)
                     .disabled(store.selectedTemplate == nil)

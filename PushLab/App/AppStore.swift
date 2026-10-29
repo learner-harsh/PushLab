@@ -25,6 +25,7 @@ final class AppStore {
 
     @ObservationIgnored private let persistence = Persistence()
     @ObservationIgnored private let client = APNsClient()
+    @ObservationIgnored private let fcmClient = FCMClient()
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
 
@@ -57,11 +58,13 @@ final class AppStore {
     }
 
     @discardableResult
-    func addTemplate(name: String? = nil, input: PushInput = PushInput()) -> PushTemplate {
+    func addTemplate(name: String? = nil, platform: PushPlatform = .apns, input: PushInput = PushInput()) -> PushTemplate {
         let count = templates.count + 1
         var input = input
         input.id = UUID()
-        let template = PushTemplate(id: input.id, name: name ?? "Template \(count)", input: input)
+        input.platform = platform
+        let defaultName = platform == .fcm ? "Android \(count)" : "Template \(count)"
+        let template = PushTemplate(id: input.id, name: name ?? defaultName, input: input)
         templates.append(template)
         selectedTemplateId = template.id
         scheduleSave()
@@ -150,9 +153,14 @@ final class AppStore {
         var sent = 0
         var failures: [SendHistoryItem] = []
         var localError: Error?
-        for token in template.input.deviceTokens {
+        let targets = template.input.platform == .fcm ? template.input.fcm.targets : template.input.deviceTokens
+        for token in targets {
             do {
-                let item = try await client.send(input: template.input, deviceToken: token, number: nextNumber())
+                let item: SendHistoryItem
+                switch template.input.platform {
+                case .apns: item = try await client.send(input: template.input, deviceToken: token, number: nextNumber())
+                case .fcm: item = try await fcmClient.send(input: template.input, target: token, number: nextNumber())
+                }
                 history.insert(item, at: 0)
                 if item.isSuccess { sent += 1 } else { failures.append(item) }
             } catch {
@@ -165,11 +173,14 @@ final class AppStore {
         if let localError {
             showToast(Toast(style: .failure, title: "Cannot send", detail: localError.localizedDescription))
         } else if failures.isEmpty {
-            let apnsId = history.first?.apnsId
-            showToast(Toast(style: .success, title: sent == 1 ? "Push request sent" : "\(sent) push requests sent", detail: apnsId.map { "apns-id \($0)" }))
+            let latest = history.first
+            let detail = latest?.platform == .fcm ? latest?.fcmMessageName : latest?.apnsId.map { "apns-id \($0)" }
+            let validated = template.input.platform == .fcm && template.input.fcm.validateOnly
+            let title = validated ? "Message validated (dry run)" : (sent == 1 ? "Push request sent" : "\(sent) push requests sent")
+            showToast(Toast(style: .success, title: title, detail: detail))
         } else {
             let first = failures[0]
-            let detail = first.reason?.explanation ?? first.localError ?? first.statusTitle
+            let detail = first.reasonExplanation ?? first.localError ?? first.statusTitle
             showToast(Toast(style: .failure, title: "\(first.statusTitle)" + (sent > 0 ? " · \(sent) sent" : ""), detail: detail))
         }
     }
@@ -180,6 +191,18 @@ final class AppStore {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(command, forType: .string)
         showToast(Toast(style: .info, title: "cURL command copied"))
+    }
+
+    // MARK: FCM
+
+    /// Fetches an OAuth token for the service account so the user can check the credentials before sending.
+    func testFCMCredentials(_ account: GoogleServiceAccount) async -> Result<String, Error> {
+        do {
+            let token = try await fcmClient.oauth.accessToken(for: account)
+            return .success(token)
+        } catch {
+            return .failure(error)
+        }
     }
 
     // MARK: Keychain

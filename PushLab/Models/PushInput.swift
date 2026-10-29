@@ -181,6 +181,40 @@ struct PushInput: Codable, Equatable, Identifiable {
     var deviceToken: String = ""
     var notificationId: String = ""
     var expiration: String = ""
+    var platform: PushPlatform = .apns
+    var fcm = FCMInput()
+
+    init() {}
+
+    /// Tolerant decoding so templates saved by older versions keep loading when fields are added.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = PushInput()
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        bundleId = try c.decodeIfPresent(String.self, forKey: .bundleId) ?? defaults.bundleId
+        message = try c.decodeIfPresent(String.self, forKey: .message) ?? defaults.message
+        environment = try c.decodeIfPresent(APNsEnvironment.self, forKey: .environment) ?? defaults.environment
+        authentication = try c.decodeIfPresent(AuthenticationMethod.self, forKey: .authentication) ?? defaults.authentication
+        keyAuthentication = try c.decodeIfPresent(KeyAuthentication.self, forKey: .keyAuthentication) ?? defaults.keyAuthentication
+        certificateAuthentication = try c.decodeIfPresent(CertificateAuthentication.self, forKey: .certificateAuthentication) ?? defaults.certificateAuthentication
+        keychainAuthentication = try c.decodeIfPresent(KeychainAuthentication.self, forKey: .keychainAuthentication) ?? defaults.keychainAuthentication
+        collapseId = try c.decodeIfPresent(String.self, forKey: .collapseId) ?? ""
+        pushType = try c.decodeIfPresent(PushType.self, forKey: .pushType) ?? defaults.pushType
+        priority = try c.decodeIfPresent(PushPriority.self, forKey: .priority) ?? defaults.priority
+        deviceToken = try c.decodeIfPresent(String.self, forKey: .deviceToken) ?? ""
+        notificationId = try c.decodeIfPresent(String.self, forKey: .notificationId) ?? ""
+        expiration = try c.decodeIfPresent(String.self, forKey: .expiration) ?? ""
+        platform = try c.decodeIfPresent(PushPlatform.self, forKey: .platform) ?? .apns
+        fcm = try c.decodeIfPresent(FCMInput.self, forKey: .fcm) ?? FCMInput()
+    }
+
+    /// What the sidebar shows under the template name.
+    var subtitle: String {
+        switch platform {
+        case .apns: return bundleId.isEmpty ? "No bundle id" : bundleId
+        case .fcm: return fcm.serviceAccount?.projectId ?? "No service account"
+        }
+    }
 
     /// Device tokens split on newlines, commas, and whitespace.
     var deviceTokens: [String] {
